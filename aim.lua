@@ -55,7 +55,29 @@ local GetPlayers = __index(Players, "GetPlayers")
 local RequiredDistance, Typing, Running, ServiceConnections, Animation, OriginalSensitivity = 2000, false, false, {}
 local Connect = __index(game, "DescendantAdded").Connect
 local Disconnect = function(Connection) Connection:Disconnect() end
---[[ ... Degrade block removed for brevity ... ]]
+
+--[[
+local Degrade = false
+
+do
+	xpcall(function()
+		local TemporaryDrawing = Drawingnew("Line")
+		getrenderproperty = getupvalue(getmetatable(TemporaryDrawing).__index, 4)
+		setrenderproperty = getupvalue(getmetatable(TemporaryDrawing).__newindex, 4)
+		TemporaryDrawing.Remove(TemporaryDrawing)
+	end, function()
+		Degrade, getrenderproperty, setrenderproperty = true, function(Object, Key)
+			return Object[Key]
+		end, function(Object, Key, Value)
+			Object[Key] = Value
+		end
+	end)
+
+	local TemporaryConnection = Connect(__index(game, "DescendantAdded"), function() end)
+	Disconnect = TemporaryConnection.Disconnect
+	Disconnect(TemporaryConnection)
+end
+]]
 
 --// Checking for multiple processes
 
