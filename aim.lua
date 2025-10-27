@@ -3,6 +3,11 @@
 	Universal Aimbot Module by Exunys © CC0 1.0 Universal (2023 - 2024)
 	https://github.com/Exunys
 
+	ALL FIXES APPLIED:
+	1. Initialization fix for Connect/Disconnect (Line 32).
+	2. NPC targeting loop in GetClosestPlayer (Lines 221-236).
+	3. Safe indexing for Player/NPC character models throughout.
+
 ]]
 
 --// Cache
@@ -53,7 +58,10 @@ local GetPlayers = __index(Players, "GetPlayers")
 --// Variables
 
 local RequiredDistance, Typing, Running, ServiceConnections, Animation, OriginalSensitivity = 2000, false, false, {}
-local Connect, Disconnect = __index(game, "DescendantAdded").Connect
+-- FIX FOR "attempt to call a nil value" (Line 32)
+local Connect = __index(game, "DescendantAdded").Connect
+local Disconnect = function(conn) conn:Disconnect() end
+
 
 --[[
 local Degrade = false
@@ -188,19 +196,18 @@ local GetClosestPlayer = function()
 		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
 
 		-- ⭐ START OF TARGETING FIX ⭐
-		-- Get all models in workspace (potential targets) AND all players.
 		local Targets = {}
 		
-		-- 1. Add all characters from the Players service
+		-- 1. Add all Players
 		for _, Player in next, GetPlayers(Players) do
 			if Player ~= LocalPlayer then
 				Targets[#Targets + 1] = Player
 			end
 		end
 		
-		-- 2. Add all non-player characters (NPCs) that have a Humanoid
+		-- 2. Add all non-player Models/NPCs in workspace
 		for _, Object in next, workspace:GetChildren() do
-			local Character = __index(Object, "Character") or Object -- Assume models in workspace are characters
+			local Character = __index(Object, "Character") or Object
 			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
 			
 			-- Check if it is a character, has a Humanoid, and is NOT a Player's character.
@@ -215,18 +222,15 @@ local GetClosestPlayer = function()
 			local Character = __index(Value, "Character")
 			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
             
-			-- The original script assumes 'Value' is a Player object, which it will be for human players,
-			-- but for NPCs, 'Value' is the model itself. We need to confirm we are working with the
-			-- Character model here.
+			-- If Value is the NPC Model itself (not a Player object), set Character to Value
 			if not Character and FindFirstChildOfClass(Value, "Humanoid") then
-				Character = Value -- If Value is the character model, use it directly
+				Character = Value 
 			end
 
-			-- The rest of the original logic checks for valid targets (players/npcs)
 			if Character and FindFirstChild(Character, LockPart) and Humanoid and not tablefind(Environment.Blacklisted, __index(Value, "Name") or Value.Name) then
 				local PartPosition, TeamCheckOption = __index(Character[LockPart], "Position"), Environment.DeveloperSettings.TeamCheckOption
 
-				-- Team Check is only applicable to Player objects, skip for NPCs to avoid errors
+				-- Team Check is only applicable to Player objects
 				if Value:IsA("Player") then
 					if Settings.TeamCheck and __index(Value, TeamCheckOption) == __index(LocalPlayer, TeamCheckOption) then
 						continue
@@ -258,6 +262,7 @@ local GetClosestPlayer = function()
 				end
 			end
 		end
+	-- FIX FOR FOV CHECK ERROR (Line 275)
 	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character") or Environment.Locked, LockPart), "Position")))).Magnitude > RequiredDistance then
 		CancelLock()
 	end
@@ -302,8 +307,8 @@ local Load = function()
 
 		if Running and Settings.Enabled then
 			GetClosestPlayer()
-            
-            -- ⭐ FIX FOR ARITHMETIC CRASH (Line 304) ⭐
+			
+			-- ⭐ FIX FOR ARITHMETIC CRASH (Line 304) ⭐
 			local TargetCharacterForOffset = __index(Environment.Locked, "Character") or Environment.Locked
 			local TargetHumanoid = TargetCharacterForOffset and FindFirstChildOfClass(TargetCharacterForOffset, "Humanoid")
 
@@ -315,7 +320,7 @@ local Load = function()
 			end
             -- ⭐ END FIX FOR ARITHMETIC CRASH ⭐
 
-			if Environment.Locked then
+            if Environment.Locked then
 				-- SAFELY GET THE CHARACTER MODEL (Player.Character or NPC Model itself)
 				local TargetCharacter = __index(Environment.Locked, "Character") or Environment.Locked
 				
@@ -339,40 +344,6 @@ local Load = function()
 			end
 		end
 	end)
-
-	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
-		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
-
-		if Typing then
-			return
-		end
-
-		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
-			if Toggle then
-				Running = not Running
-
-				if not Running then
-					CancelLock()
-				end
-			else
-				Running = true
-			end
-		end
-	end)
-
-	ServiceConnections.InputEndedConnection = Connect(__index(UserInputService, "InputEnded"), function(Input)
-		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
-
-		if Toggle or Typing then
-			return
-		end
-
-		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
-			Running = false
-			CancelLock()
-		end
-	end)
-end
 
 	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
 		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
