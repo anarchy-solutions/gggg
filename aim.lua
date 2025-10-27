@@ -267,11 +267,15 @@ local GetClosestPlayer = function()
 				end
 			end
 		end
-    local LockedCharacter = GetTargetCharacter(Environment.Locked)
-	elseif LockedCharacter and (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, LockedCharacter[LockPart].Position))).Magnitude > RequiredDistance then
+	end -- Closing the 'if not Environment.Locked' block
+	
+	-- Check if locked target is still in FOV/range (uses the GetTargetCharacter fix)
+	local LockedCharacter = GetTargetCharacter(Environment.Locked)
+	
+	-- This uses the standard indexing [LockPart].Position to avoid the Camera error
+	if LockedCharacter and (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, LockedCharacter[LockPart].Position))).Magnitude > RequiredDistance then
 		CancelLock()
 	end
-end
 end
 
 local Load = function()
