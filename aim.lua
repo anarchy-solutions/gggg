@@ -93,7 +93,7 @@ getgenv().ExunysDeveloperAimbot = {
 
 		-- NPC MODE ADDED:
 		-- When true, non-player NPC Models in workspace with a Humanoid and the LockPart will be considered targets.
-		NPCMode = false
+		NPCMode = true
 	},
 
 	FOVSettings = {
