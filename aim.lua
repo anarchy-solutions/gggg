@@ -307,24 +307,23 @@ local Load = function()
 
 		if Running and Settings.Enabled then
 			GetClosestPlayer()
-			
-			-- ⭐ FIX FOR ARITHMETIC CRASH (Line 304) ⭐
-			local TargetCharacterForOffset = __index(Environment.Locked, "Character") or Environment.Locked
-			local TargetHumanoid = TargetCharacterForOffset and FindFirstChildOfClass(TargetCharacterForOffset, "Humanoid")
-
-			if TargetHumanoid and OffsetToMoveDirection then
-				local MoveDirection = __index(TargetHumanoid, "MoveDirection")
-				Offset = MoveDirection and MoveDirection * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
-			else
-				Offset = Vector3zero
-			end
-            -- ⭐ END FIX FOR ARITHMETIC CRASH ⭐
 
             if Environment.Locked then
 				-- SAFELY GET THE CHARACTER MODEL (Player.Character or NPC Model itself)
 				local TargetCharacter = __index(Environment.Locked, "Character") or Environment.Locked
 				
-				local LockedPosition_Vector3 = __index(TargetCharacter[LockPart], "Position")
+				-- ⭐ FINAL SAFE OFFSET CALCULATION (Fixes Line 304 Arithmetic Crash) ⭐
+				local TargetHumanoid = TargetCharacter and FindFirstChildOfClass(TargetCharacter, "Humanoid")
+				
+				if TargetHumanoid and OffsetToMoveDirection then
+					local MoveDirection = __index(TargetHumanoid, "MoveDirection")
+					Offset = MoveDirection and MoveDirection * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
+				else
+					Offset = Vector3zero
+				end
+				-- ⭐ END FINAL SAFE OFFSET CALCULATION ⭐
+
+				local LockedPosition_Vector3 = __index(TargetCharacter, LockPart).Position -- Safer indexing for Part Position
 				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
 				if Environment.Settings.LockMode == 2 then
