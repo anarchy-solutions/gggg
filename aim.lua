@@ -289,7 +289,7 @@ local Load = function()
 	end
 	]]
 
-ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
+    ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
 		local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
 
 		if FOVSettings.Enabled and Settings.Enabled then
@@ -322,35 +322,42 @@ ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environ
 				-- SAFELY GET THE CHARACTER MODEL using the new function
 				local TargetCharacter = GetTargetCharacter(Environment.Locked)
 				
-				-- Offset Calculation (Fixes Arithmetic Crash)
+				-- Offset Calculation (Handles MoveDirection safely)
 				local TargetHumanoid = TargetCharacter and FindFirstChildOfClass(TargetCharacter, "Humanoid")
 				
 				if TargetHumanoid and OffsetToMoveDirection then
-					local MoveDirection = __index(TargetHumanoid, "MoveDirection")
+					-- FIX: Use standard dot notation for MoveDirection
+					local MoveDirection = TargetHumanoid.MoveDirection 
 					Offset = MoveDirection and MoveDirection * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
 				else
 					Offset = Vector3zero
 				end
 				-- End Offset Calculation
 				
-				-- Safe index for position
-				local LockedPosition_Vector3 = __index(TargetCharacter, LockPart).Position
-				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
+				-- FIX: Use standard dot notation for Position (This stops the spam)
+				local LockedPosition_Part = TargetCharacter and TargetCharacter:FindFirstChild(LockPart)
+                
+                if LockedPosition_Part then
+    				local LockedPosition_Vector3 = LockedPosition_Part.Position 
+    				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
-				if Environment.Settings.LockMode == 2 then
-					mousemoverel((LockedPosition.X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2, (LockedPosition.Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2)
-				else
-					if Settings.Sensitivity > 0 then
-						Animation = TweenService:Create(Camera, TweenInfonew(Environment.Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3)})
-						Animation:Play()
-					else
-						__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
-					end
+    				if Environment.Settings.LockMode == 2 then
+    					mousemoverel((LockedPosition.X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2, (LockedPosition.Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2)
+    				else
+    					if Settings.Sensitivity > 0 then
+    						Animation = TweenService:Create(Camera, TweenInfonew(Environment.Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFrame.new(Camera.CFrame.Position, LockedPosition_Vector3)})
+    						Animation:Play()
+    					else
+    						__newindex(Camera, "CFrame", CFrame.new(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
+    					end
 
-					__newindex(UserInputService, "MouseDeltaSensitivity", 0)
-				end
+    					__newindex(UserInputService, "MouseDeltaSensitivity", 0)
+    				end
 
-				setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
+    				setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
+                else
+                    CancelLock() -- Target part is missing, cancel lock to prevent further errors
+                end
 			end
 		end
 	end)
