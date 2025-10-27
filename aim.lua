@@ -302,10 +302,20 @@ local Load = function()
 
 		if Running and Settings.Enabled then
 			GetClosestPlayer()
+            
+            -- ⭐ FIX FOR ARITHMETIC CRASH (Line 304) ⭐
+			local TargetCharacterForOffset = __index(Environment.Locked, "Character") or Environment.Locked
+			local TargetHumanoid = TargetCharacterForOffset and FindFirstChildOfClass(TargetCharacterForOffset, "Humanoid")
 
-			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
+			if TargetHumanoid and OffsetToMoveDirection then
+				local MoveDirection = __index(TargetHumanoid, "MoveDirection")
+				Offset = MoveDirection and MoveDirection * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
+			else
+				Offset = Vector3zero
+			end
+            -- ⭐ END FIX FOR ARITHMETIC CRASH ⭐
 
-            if Environment.Locked then
+			if Environment.Locked then
 				-- SAFELY GET THE CHARACTER MODEL (Player.Character or NPC Model itself)
 				local TargetCharacter = __index(Environment.Locked, "Character") or Environment.Locked
 				
@@ -329,6 +339,40 @@ local Load = function()
 			end
 		end
 	end)
+
+	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
+		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
+
+		if Typing then
+			return
+		end
+
+		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
+			if Toggle then
+				Running = not Running
+
+				if not Running then
+					CancelLock()
+				end
+			else
+				Running = true
+			end
+		end
+	end)
+
+	ServiceConnections.InputEndedConnection = Connect(__index(UserInputService, "InputEnded"), function(Input)
+		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
+
+		if Toggle or Typing then
+			return
+		end
+
+		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
+			Running = false
+			CancelLock()
+		end
+	end)
+end
 
 	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
 		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
