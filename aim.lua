@@ -53,8 +53,7 @@ local GetPlayers = __index(Players, "GetPlayers")
 --// Variables
 
 local RequiredDistance, Typing, Running, ServiceConnections, Animation, OriginalSensitivity = 2000, false, false, {}
-local Connect = __index(game, "DescendantAdded").Connect
-local Disconnect = function(Connection) Connection:Disconnect() end
+local Connect, Disconnect = __index(game, "DescendantAdded").Connect
 
 --[[
 local Degrade = false
@@ -111,11 +110,7 @@ getgenv().ExunysDeveloperAimbot = {
 		LockPart = "Head", -- Body part to lock on
 
 		TriggerKey = Enum.UserInputType.MouseButton2,
-		Toggle = false,
-
-		-- NPC MODE ADDED:
-		-- When true, non-player NPC Models in workspace with a Humanoid and the LockPart will be considered targets.
-		NPCMode = false
+		Toggle = false
 	},
 
 	FOVSettings = {
@@ -185,18 +180,6 @@ local CancelLock = function()
 	end
 end
 
--- Utility: simple helper to test if a model is a player's character
-local function isPlayerCharacter(model)
-	if not model then return false end
-	for _, pl in next, GetPlayers(Players) do
-		local char = __index(pl, "Character")
-		if char and char == model then
-			return true
-		end
-	end
-	return false
-end
-
 local GetClosestPlayer = function()
 	local Settings = Environment.Settings
 	local LockPart = Settings.LockPart
@@ -204,10 +187,16 @@ local GetClosestPlayer = function()
 	if not Environment.Locked then
 		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
 
-		-- First: scan real Players
 		for _, Value in next, GetPlayers(Players) do
 			local Character = __index(Value, "Character")
 			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
+            
+            -- ⭐ NPC Check Added Here (Line 223) ⭐
+            -- If the target is not a Player object (i.e., it's a model in workspace/not parented to Players), skip it.
+            if not Value:IsA("Player") then 
+                continue 
+            end
+            -- ⭐ End of NPC Check ⭐
 
 			if Value ~= LocalPlayer and not tablefind(Environment.Blacklisted, __index(Value, "Name")) and Character and FindFirstChild(Character, LockPart) and Humanoid then
 				local PartPosition, TeamCheckOption = __index(Character[LockPart], "Position"), Environment.DeveloperSettings.TeamCheckOption
@@ -241,68 +230,7 @@ local GetClosestPlayer = function()
 				end
 			end
 		end
-
-		-- NPC SCAN (ADDED): check workspace models for NPCs if enabled
-		if Settings.NPCMode then
-			for _, model in next, GetDescendants(workspace) do
-				if type(model) == "table" and model.ClassName then
-					-- ignore non-model descendants early
-				end
-
-				-- we only want top-level Models or Models with Humanoid; skip if it's a player character
-				if model and model:IsA and model:IsA("Model") then
-					-- skip player characters
-					if isPlayerCharacter(model) then
-						continue
-					end
-
-					local Humanoid = FindFirstChildOfClass(model, "Humanoid")
-					local Part = FindFirstChild(model, LockPart)
-
-					if Humanoid and Part then
-						-- Alive check
-						if Settings.AliveCheck and __index(Humanoid, "Health") <= 0 then
-							continue
-						end
-
-						-- Wall check uses the same BlacklistTable logic as players (ignore local character parts)
-						local PartPosition = __index(Part, "Position")
-						if Settings.WallCheck then
-							local BlacklistTable = GetDescendants(__index(LocalPlayer, "Character"))
-
-							for _, Value in next, GetDescendants(model) do
-								BlacklistTable[#BlacklistTable + 1] = Value
-							end
-
-							if #GetPartsObscuringTarget(Camera, {PartPosition}, BlacklistTable) > 0 then
-								continue
-							end
-						end
-
-						local Vector, OnScreen, Distance = WorldToViewportPoint(Camera, PartPosition)
-						Vector = ConvertVector(Vector)
-						Distance = (GetMouseLocation(UserInputService) - Vector).Magnitude
-
-						if Distance < RequiredDistance and OnScreen then
-							-- For NPCs we set Environment.Locked to the model itself (not a Player instance).
-							-- downstream code handles Environment.Locked.Character when it's a Player, so we need to be careful:
-							-- we'll store the model in Environment.Locked and later code uses Environment.Locked.Character when it's a Player.
-							-- to keep that transparent, set Environment.Locked to the model and mark a flag.
-							RequiredDistance, Environment.Locked = Distance, model
-						end
-					end
-				end
-			end
-		end
-
-	elseif
-		-- if already locked, check if mouse moved outside required distance; adapt to both Player and Model locks
-		(GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera,
-			-- handle both Player object and raw Model
-			( (type(Environment.Locked) == "table" and Environment.Locked.Character and __index(__index(Environment.Locked, "Character"), LockPart) ) or -- player
-			  (type(Environment.Locked) == "Instance" and FindFirstChild(Environment.Locked, LockPart) and __index(FindFirstChild(Environment.Locked, LockPart), "Position") ) -- npc (we'll convert below)
-			) or Vector3zero
-		))).Magnitude > RequiredDistance then
+	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character"), LockPart), "Position")))).Magnitude > RequiredDistance then
 		CancelLock()
 	end
 end
@@ -312,7 +240,11 @@ local Load = function()
 
 	local Settings, FOVCircle, FOVCircleOutline, FOVSettings, Offset = Environment.Settings, Environment.FOVCircle, Environment.FOVCircleOutline, Environment.FOVSettings
 
-	--[[ ... ]]
+	--[[
+	if not Degrade then
+		FOVCircle, FOVCircleOutline = FOVCircle.__OBJECT, FOVCircleOutline.__OBJECT
+	end
+	]]
 
 	ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
 		local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
@@ -341,37 +273,12 @@ local Load = function()
 		end
 
 		if Running and Settings.Enabled then
-            GetClosestPlayer()
+			GetClosestPlayer()
 
-			-- NEW, SAFE CODE BLOCK START
-			local TargetHumanoid = Environment.Locked and Environment.Locked.Character and FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid")
-			local Offset = Vector3zero -- Start with a safe default
-
-			if TargetHumanoid and OffsetToMoveDirection then
-				-- Only calculate the offset if the Humanoid exists
-				local MoveDirection = __index(TargetHumanoid, "MoveDirection")
-				local Increment = mathclamp(Settings.OffsetIncrement, 1, 30) / 10
-				
-				-- Ensure MoveDirection exists before multiplication
-				if MoveDirection then
-					Offset = MoveDirection * Increment
-				end
-			end
-			-- NEW, SAFE CODE BLOCK END
+			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
 
 			if Environment.Locked then
-			if Environment.Locked then
-				-- Determine the locked target's actual position: support both Player objects (with Character) and raw NPC Models
-				local LockedPosition_Vector3
-				if Environment.Locked.Character then
-					-- it's a Player
-					LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
-				else
-					-- assume it's an NPC Model
-					local part = FindFirstChild(Environment.Locked, LockPart)
-					LockedPosition_Vector3 = part and __index(part, "Position") or Vector3zero
-				end
-
+				local LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
 				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
 				if Environment.Settings.LockMode == 2 then
@@ -441,8 +348,8 @@ end)
 function Environment.Exit(self) -- METHOD | ExunysDeveloperAimbot:Exit(<void>)
 	assert(self, "EXUNYS_AIMBOT-V3.Exit: Missing parameter #1 \"self\" <table>.")
 
-    for Index, Connection in next, ServiceConnections do
-		Connection:Disconnect()
+	for Index, _ in next, ServiceConnections do
+		Disconnect(ServiceConnections[Index])
 	end
 
 	Load = nil; ConvertVector = nil; CancelLock = nil; GetClosestPlayer = nil; GetRainbowColor = nil; FixUsername = nil
@@ -452,9 +359,9 @@ function Environment.Exit(self) -- METHOD | ExunysDeveloperAimbot:Exit(<void>)
 	getgenv().ExunysDeveloperAimbot = nil
 end
 
-function Environment.Restart()
-	for Index, Connection in next, ServiceConnections do -- Changed '_' to 'Connection'
-		Connection:Disconnect() -- Use the connection's built-in method
+function Environment.Restart() -- ExunysDeveloperAimbot.Restart(<void>)
+	for Index, _ in next, ServiceConnections do
+		Disconnect(ServiceConnections[Index])
 	end
 
 	Load()
