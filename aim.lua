@@ -305,8 +305,12 @@ local Load = function()
 
 			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
 
-			if Environment.Locked then
-				local LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
+            if Environment.Locked then
+				-- Safely get the character model: it's either the 'Character' property (for a Player)
+				-- or the locked object itself (for an NPC Model).
+				local TargetCharacter = __index(Environment.Locked, "Character") or Environment.Locked
+				
+				local LockedPosition_Vector3 = __index(TargetCharacter[LockPart], "Position")
 				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
 				if Environment.Settings.LockMode == 2 then
