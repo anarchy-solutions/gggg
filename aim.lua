@@ -188,6 +188,11 @@ local CancelLock = function()
 	end
 end
 
+local GetTargetCharacter = function(Target)
+	if not Target then return nil end
+	return __index(Target, "Character") or Target
+end
+
 local GetClosestPlayer = function()
 	local Settings = Environment.Settings
 	local LockPart = Settings.LockPart
@@ -279,7 +284,7 @@ local Load = function()
 	end
 	]]
 
-	ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
+ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
 		local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
 
 		if FOVSettings.Enabled and Settings.Enabled then
@@ -309,10 +314,10 @@ local Load = function()
 			GetClosestPlayer()
 
             if Environment.Locked then
-				-- SAFELY GET THE CHARACTER MODEL (Player.Character or NPC Model itself)
-				local TargetCharacter = __index(Environment.Locked, "Character") or Environment.Locked
+				-- SAFELY GET THE CHARACTER MODEL using the new function
+				local TargetCharacter = GetTargetCharacter(Environment.Locked)
 				
-				-- ⭐ FINAL SAFE OFFSET CALCULATION (Fixes Line 304 Arithmetic Crash) ⭐
+				-- Offset Calculation (Fixes Arithmetic Crash)
 				local TargetHumanoid = TargetCharacter and FindFirstChildOfClass(TargetCharacter, "Humanoid")
 				
 				if TargetHumanoid and OffsetToMoveDirection then
@@ -321,9 +326,10 @@ local Load = function()
 				else
 					Offset = Vector3zero
 				end
-				-- ⭐ END FINAL SAFE OFFSET CALCULATION ⭐
-
-				local LockedPosition_Vector3 = __index(TargetCharacter, LockPart).Position -- Safer indexing for Part Position
+				-- End Offset Calculation
+				
+				-- Safe index for position
+				local LockedPosition_Vector3 = __index(TargetCharacter, LockPart).Position
 				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
 				if Environment.Settings.LockMode == 2 then
