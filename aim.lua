@@ -187,24 +187,52 @@ local GetClosestPlayer = function()
 	if not Environment.Locked then
 		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
 
-		for _, Value in next, GetPlayers(Players) do
+		-- ⭐ START OF TARGETING FIX ⭐
+		-- Get all models in workspace (potential targets) AND all players.
+		local Targets = {}
+		
+		-- 1. Add all characters from the Players service
+		for _, Player in next, GetPlayers(Players) do
+			if Player ~= LocalPlayer then
+				Targets[#Targets + 1] = Player
+			end
+		end
+		
+		-- 2. Add all non-player characters (NPCs) that have a Humanoid
+		for _, Object in next, workspace:GetChildren() do
+			local Character = __index(Object, "Character") or Object -- Assume models in workspace are characters
+			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
+			
+			-- Check if it is a character, has a Humanoid, and is NOT a Player's character.
+			if Humanoid and not __index(Players, "GetPlayerFromCharacter")(Object) then
+				Targets[#Targets + 1] = Object -- Add the NPC/Model as a target
+			end
+		end
+
+		for _, Value in next, Targets do
+		-- ⭐ END OF TARGETING FIX ⭐
+
 			local Character = __index(Value, "Character")
 			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
             
-            -- ⭐ NPC Check Added Here (Line 223) ⭐
-            -- If the target is not a Player object (i.e., it's a model in workspace/not parented to Players), skip it.
-            if not Value:IsA("Player") then 
-                continue 
-            end
-            -- ⭐ End of NPC Check ⭐
+			-- The original script assumes 'Value' is a Player object, which it will be for human players,
+			-- but for NPCs, 'Value' is the model itself. We need to confirm we are working with the
+			-- Character model here.
+			if not Character and FindFirstChildOfClass(Value, "Humanoid") then
+				Character = Value -- If Value is the character model, use it directly
+			end
 
-			if Value ~= LocalPlayer and not tablefind(Environment.Blacklisted, __index(Value, "Name")) and Character and FindFirstChild(Character, LockPart) and Humanoid then
+			-- The rest of the original logic checks for valid targets (players/npcs)
+			if Character and FindFirstChild(Character, LockPart) and Humanoid and not tablefind(Environment.Blacklisted, __index(Value, "Name") or Value.Name) then
 				local PartPosition, TeamCheckOption = __index(Character[LockPart], "Position"), Environment.DeveloperSettings.TeamCheckOption
 
-				if Settings.TeamCheck and __index(Value, TeamCheckOption) == __index(LocalPlayer, TeamCheckOption) then
-					continue
+				-- Team Check is only applicable to Player objects, skip for NPCs to avoid errors
+				if Value:IsA("Player") then
+					if Settings.TeamCheck and __index(Value, TeamCheckOption) == __index(LocalPlayer, TeamCheckOption) then
+						continue
+					end
 				end
-
+                
 				if Settings.AliveCheck and __index(Humanoid, "Health") <= 0 then
 					continue
 				end
@@ -212,8 +240,8 @@ local GetClosestPlayer = function()
 				if Settings.WallCheck then
 					local BlacklistTable = GetDescendants(__index(LocalPlayer, "Character"))
 
-					for _, Value in next, GetDescendants(Character) do
-						BlacklistTable[#BlacklistTable + 1] = Value
+					for _, TargetPart in next, GetDescendants(Character) do
+						BlacklistTable[#BlacklistTable + 1] = TargetPart
 					end
 
 					if #GetPartsObscuringTarget(Camera, {PartPosition}, BlacklistTable) > 0 then
@@ -230,7 +258,7 @@ local GetClosestPlayer = function()
 				end
 			end
 		end
-	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character"), LockPart), "Position")))).Magnitude > RequiredDistance then
+	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character") or Environment.Locked, LockPart), "Position")))).Magnitude > RequiredDistance then
 		CancelLock()
 	end
 end
