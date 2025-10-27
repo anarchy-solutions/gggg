@@ -341,10 +341,25 @@ local Load = function()
 		end
 
 		if Running and Settings.Enabled then
-			GetClosestPlayer()
+            GetClosestPlayer()
 
-			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
+			-- NEW, SAFE CODE BLOCK START
+			local TargetHumanoid = Environment.Locked and Environment.Locked.Character and FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid")
+			local Offset = Vector3zero -- Start with a safe default
 
+			if TargetHumanoid and OffsetToMoveDirection then
+				-- Only calculate the offset if the Humanoid exists
+				local MoveDirection = __index(TargetHumanoid, "MoveDirection")
+				local Increment = mathclamp(Settings.OffsetIncrement, 1, 30) / 10
+				
+				-- Ensure MoveDirection exists before multiplication
+				if MoveDirection then
+					Offset = MoveDirection * Increment
+				end
+			end
+			-- NEW, SAFE CODE BLOCK END
+
+			if Environment.Locked then
 			if Environment.Locked then
 				-- Determine the locked target's actual position: support both Player objects (with Character) and raw NPC Models
 				local LockedPosition_Vector3
