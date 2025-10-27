@@ -267,10 +267,11 @@ local GetClosestPlayer = function()
 				end
 			end
 		end
-	-- FIX FOR FOV CHECK ERROR (Line 275)
-	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character") or Environment.Locked, LockPart), "Position")))).Magnitude > RequiredDistance then
+    local LockedCharacter = GetTargetCharacter(Environment.Locked)
+	elseif LockedCharacter and (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, LockedCharacter[LockPart].Position))).Magnitude > RequiredDistance then
 		CancelLock()
 	end
+end
 end
 
 local Load = function()
