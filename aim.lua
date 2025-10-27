@@ -55,7 +55,28 @@ local GetPlayers = __index(Players, "GetPlayers")
 local RequiredDistance, Typing, Running, ServiceConnections, Animation, OriginalSensitivity = 2000, false, false, {}
 local Connect, Disconnect = __index(game, "DescendantAdded").Connect
 
---[[ ... Degrade block removed for brevity ... ]]
+--[[
+local Degrade = false
+
+do
+	xpcall(function()
+		local TemporaryDrawing = Drawingnew("Line")
+		getrenderproperty = getupvalue(getmetatable(TemporaryDrawing).__index, 4)
+		setrenderproperty = getupvalue(getmetatable(TemporaryDrawing).__newindex, 4)
+		TemporaryDrawing.Remove(TemporaryDrawing)
+	end, function()
+		Degrade, getrenderproperty, setrenderproperty = true, function(Object, Key)
+			return Object[Key]
+		end, function(Object, Key, Value)
+			Object[Key] = Value
+		end
+	end)
+
+	local TemporaryConnection = Connect(__index(game, "DescendantAdded"), function() end)
+	Disconnect = TemporaryConnection.Disconnect
+	Disconnect(TemporaryConnection)
+end
+]]
 
 --// Checking for multiple processes
 
@@ -89,11 +110,7 @@ getgenv().ExunysDeveloperAimbot = {
 		LockPart = "Head", -- Body part to lock on
 
 		TriggerKey = Enum.UserInputType.MouseButton2,
-		Toggle = false,
-
-		-- NPC MODE ADDED:
-		-- When true, non-player NPC Models in workspace with a Humanoid and the LockPart will be considered targets.
-		NPCMode = true
+		Toggle = false
 	},
 
 	FOVSettings = {
@@ -163,17 +180,9 @@ local CancelLock = function()
 	end
 end
 
--- Utility: simple helper to test if a model is a player's character
-local function isPlayerCharacter(model)
-	if not model then return false end
-	for _, pl in next, GetPlayers(Players) do
-		local char = __index(pl, "Character")
-		if char and char == model then
-			return true
-		end
-	end
-	return false
-end
+local getNil = function(name, class) for _, v in next, getnilinstances() do if v.ClassName == class and v.Name == name then return v end end end
+
+getNil("CopyBot1", "Model")
 
 local GetClosestPlayer = function()
 	local Settings = Environment.Settings
@@ -182,9 +191,8 @@ local GetClosestPlayer = function()
 	if not Environment.Locked then
 		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
 
-		-- First: scan real Players
 		for _, Value in next, GetPlayers(Players) do
-			local Character = __index(Value, "Character")
+			local Character = __index(Value, "Character") or getNil()
 			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
 
 			if Value ~= LocalPlayer and not tablefind(Environment.Blacklisted, __index(Value, "Name")) and Character and FindFirstChild(Character, LockPart) and Humanoid then
@@ -219,68 +227,7 @@ local GetClosestPlayer = function()
 				end
 			end
 		end
-
-		-- NPC SCAN (ADDED): check workspace models for NPCs if enabled
-		if Settings.NPCMode then
-			for _, model in next, GetDescendants(workspace) do
-				if type(model) == "table" and model.ClassName then
-					-- ignore non-model descendants early
-				end
-
-				-- we only want top-level Models or Models with Humanoid; skip if it's a player character
-				if model and model:IsA and model:IsA("Model") then
-					-- skip player characters
-					if isPlayerCharacter(model) then
-						continue
-					end
-
-					local Humanoid = FindFirstChildOfClass(model, "Humanoid")
-					local Part = FindFirstChild(model, LockPart)
-
-					if Humanoid and Part then
-						-- Alive check
-						if Settings.AliveCheck and __index(Humanoid, "Health") <= 0 then
-							continue
-						end
-
-						-- Wall check uses the same BlacklistTable logic as players (ignore local character parts)
-						local PartPosition = __index(Part, "Position")
-						if Settings.WallCheck then
-							local BlacklistTable = GetDescendants(__index(LocalPlayer, "Character"))
-
-							for _, Value in next, GetDescendants(model) do
-								BlacklistTable[#BlacklistTable + 1] = Value
-							end
-
-							if #GetPartsObscuringTarget(Camera, {PartPosition}, BlacklistTable) > 0 then
-								continue
-							end
-						end
-
-						local Vector, OnScreen, Distance = WorldToViewportPoint(Camera, PartPosition)
-						Vector = ConvertVector(Vector)
-						Distance = (GetMouseLocation(UserInputService) - Vector).Magnitude
-
-						if Distance < RequiredDistance and OnScreen then
-							-- For NPCs we set Environment.Locked to the model itself (not a Player instance).
-							-- downstream code handles Environment.Locked.Character when it's a Player, so we need to be careful:
-							-- we'll store the model in Environment.Locked and later code uses Environment.Locked.Character when it's a Player.
-							-- to keep that transparent, set Environment.Locked to the model and mark a flag.
-							RequiredDistance, Environment.Locked = Distance, model
-						end
-					end
-				end
-			end
-		end
-
-	elseif
-		-- if already locked, check if mouse moved outside required distance; adapt to both Player and Model locks
-		(GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera,
-			-- handle both Player object and raw Model
-			( (type(Environment.Locked) == "table" and Environment.Locked.Character and __index(__index(Environment.Locked, "Character"), LockPart) ) or -- player
-			  (type(Environment.Locked) == "Instance" and FindFirstChild(Environment.Locked, LockPart) and __index(FindFirstChild(Environment.Locked, LockPart), "Position") ) -- npc (we'll convert below)
-			) or Vector3zero
-		))).Magnitude > RequiredDistance then
+	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character"), LockPart), "Position")))).Magnitude > RequiredDistance then
 		CancelLock()
 	end
 end
@@ -290,7 +237,11 @@ local Load = function()
 
 	local Settings, FOVCircle, FOVCircleOutline, FOVSettings, Offset = Environment.Settings, Environment.FOVCircle, Environment.FOVCircleOutline, Environment.FOVSettings
 
-	--[[ ... ]]
+	--[[
+	if not Degrade then
+		FOVCircle, FOVCircleOutline = FOVCircle.__OBJECT, FOVCircleOutline.__OBJECT
+	end
+	]]
 
 	ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
 		local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
@@ -324,17 +275,7 @@ local Load = function()
 			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
 
 			if Environment.Locked then
-				-- Determine the locked target's actual position: support both Player objects (with Character) and raw NPC Models
-				local LockedPosition_Vector3
-				if Environment.Locked.Character then
-					-- it's a Player
-					LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
-				else
-					-- assume it's an NPC Model
-					local part = FindFirstChild(Environment.Locked, LockPart)
-					LockedPosition_Vector3 = part and __index(part, "Position") or Vector3zero
-				end
-
+				local LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
 				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
 
 				if Environment.Settings.LockMode == 2 then
