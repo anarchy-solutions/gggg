@@ -151,71 +151,71 @@ end
 local GetClosestPlayer = function()
 	local Settings = Environment.Settings
 	local LockPart = Settings.LockPart
+	local BotsFolder = workspace:FindFirstChild("CurrentBots")
+
+	if not BotsFolder then
+		return -- safety check
+	end
 
 	if not Environment.Locked then
 		RequiredDistance = Environment.FOVSettings.Enabled and Environment.FOVSettings.Radius or 2000
 
-		for _, Value in next, GetPlayers(Players) do
-			local Character = __index(Value, "Character")
-			local Humanoid = Character and FindFirstChildOfClass(Character, "Humanoid")
+		for _, Model in next, BotsFolder:GetChildren() do
+			if not Model:IsA("Model") then
+				continue
+			end
 
-			-- ensure Value is a real player and has expected character/parts
-			if Value ~= LocalPlayer and not tablefind(Environment.Blacklisted, __index(Value, "Name")) and Character and FindFirstChild(Character, LockPart) and Humanoid then
+			local Humanoid = Model:FindFirstChildOfClass("Humanoid")
+			local LockPartInstance = Model:FindFirstChild(LockPart)
 
-				-- NPC CHECK START
-				local IsNPC = false
-				-- If CurrentBots exists, safely attempt IsDescendantOf check
-				if CurrentBots and Character and __index(Character, "IsDescendantOf") then
-					local ok, res = pcall(__index(Character, "IsDescendantOf"), Character, CurrentBots)
-					if ok and res then
-						IsNPC = true
-					end
-				end
+			if not (Humanoid and LockPartInstance) then
+				continue
+			end
 
-				-- Respect the new settings:
-				-- If IgnoreNPCs is true and this is an NPC -> skip.
-				if Settings.IgnoreNPCs and IsNPC then
-					continue
-				end
-				-- If OnlyNPCs is true and this is NOT an NPC -> skip.
-				if Settings.OnlyNPCs and not IsNPC then
-					continue
-				end
-				-- NPC CHECK END
+			if Settings.AliveCheck and Humanoid.Health <= 0 then
+				continue
+			end
 
-				local PartPosition, TeamCheckOption = __index(Character[LockPart], "Position"), Environment.DeveloperSettings.TeamCheckOption
-
-				if Settings.TeamCheck and __index(Value, TeamCheckOption) == __index(LocalPlayer, TeamCheckOption) then
+			if Settings.WallCheck then
+				local LocalChar = LocalPlayer.Character
+				if not LocalChar then
 					continue
 				end
 
-				if Settings.AliveCheck and __index(Humanoid, "Health") <= 0 then
+				local blacklist = {}
+				for _, v in next, LocalChar:GetDescendants() do
+					table.insert(blacklist, v)
+				end
+				for _, v in next, Model:GetDescendants() do
+					table.insert(blacklist, v)
+				end
+
+				local parts = Camera:GetPartsObscuringTarget({ LockPartInstance.Position }, blacklist)
+				if #parts > 0 then
 					continue
-				end
-
-				if Settings.WallCheck then
-					local BlacklistTable = GetDescendants(__index(LocalPlayer, "Character"))
-
-					for _, Value in next, GetDescendants(Character) do
-						BlacklistTable[#BlacklistTable + 1] = Value
-					end
-
-					if #GetPartsObscuringTarget(Camera, {PartPosition}, BlacklistTable) > 0 then
-						continue
-					end
-				end
-
-				local Vector, OnScreen, Distance = WorldToViewportPoint(Camera, PartPosition)
-				Vector = ConvertVector(Vector)
-				Distance = (GetMouseLocation(UserInputService) - Vector).Magnitude
-
-				if Distance < RequiredDistance and OnScreen then
-					RequiredDistance, Environment.Locked = Distance, Value
 				end
 			end
+
+			local Vector, OnScreen = Camera:WorldToViewportPoint(LockPartInstance.Position)
+			local Distance = (UserInputService:GetMouseLocation() - Vector2.new(Vector.X, Vector.Y)).Magnitude
+
+			if OnScreen and Distance < RequiredDistance then
+				RequiredDistance = Distance
+				Environment.Locked = Model
+			end
 		end
-	elseif (GetMouseLocation(UserInputService) - ConvertVector(WorldToViewportPoint(Camera, __index(__index(__index(Environment.Locked, "Character"), LockPart), "Position")))).Magnitude > RequiredDistance then
-		CancelLock()
+	else
+		local LockedChar = Environment.Locked
+		if LockedChar and LockedChar:FindFirstChild(LockPart) then
+			local pos = LockedChar[LockPart].Position
+			local screenPos = Camera:WorldToViewportPoint(pos)
+			local dist = (UserInputService:GetMouseLocation() - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+			if dist > RequiredDistance then
+				CancelLock()
+			end
+		else
+			CancelLock()
+		end
 	end
 end
 
