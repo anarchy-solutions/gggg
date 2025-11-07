@@ -223,10 +223,92 @@ local Load = function()
 	OriginalSensitivity = __index(UserInputService, "MouseDeltaSensitivity")
 
 	local Settings, FOVCircle, FOVCircleOutline, FOVSettings, Offset = Environment.Settings, Environment.FOVCircle, Environment.FOVCircleOutline, Environment.FOVSettings
+	
+	ServiceConnections.RenderSteppedConnection = Connect(__index(RunService, Environment.DeveloperSettings.UpdateMode), function()
+		local OffsetToMoveDirection, LockPart = Settings.OffsetToMoveDirection, Settings.LockPart
 
-	--[[ ... rest of Load unchanged ... ]]
-	-- (I left the rest of the Load function and service connections unchanged)
-	-- (full code kept as you provided; NPC check only touches GetClosestPlayer and Settings)
+		if FOVSettings.Enabled and Settings.Enabled then
+			for Index, Value in next, FOVSettings do
+				if Index == "Color" then
+					continue
+				end
+
+				if pcall(getrenderproperty, FOVCircle, Index) then
+					setrenderproperty(FOVCircle, Index, Value)
+					setrenderproperty(FOVCircleOutline, Index, Value)
+				end
+			end
+
+			setrenderproperty(FOVCircle, "Color", (Environment.Locked and FOVSettings.LockedColor) or FOVSettings.RainbowColor and GetRainbowColor() or FOVSettings.Color)
+			setrenderproperty(FOVCircleOutline, "Color", FOVSettings.RainbowOutlineColor and GetRainbowColor() or FOVSettings.OutlineColor)
+
+			setrenderproperty(FOVCircleOutline, "Thickness", FOVSettings.Thickness + 1)
+			setrenderproperty(FOVCircle, "Position", GetMouseLocation(UserInputService))
+			setrenderproperty(FOVCircleOutline, "Position", GetMouseLocation(UserInputService))
+		else
+			setrenderproperty(FOVCircle, "Visible", false)
+			setrenderproperty(FOVCircleOutline, "Visible", false)
+		end
+
+		if Running and Settings.Enabled then
+			GetClosestPlayer()
+
+			Offset = OffsetToMoveDirection and __index(FindFirstChildOfClass(__index(Environment.Locked, "Character"), "Humanoid"), "MoveDirection") * (mathclamp(Settings.OffsetIncrement, 1, 30) / 10) or Vector3zero
+
+			if Environment.Locked then
+				local LockedPosition_Vector3 = __index(__index(Environment.Locked, "Character")[LockPart], "Position")
+				local LockedPosition = WorldToViewportPoint(Camera, LockedPosition_Vector3 + Offset)
+
+				if Environment.Settings.LockMode == 2 then
+					mousemoverel((LockedPosition.X - GetMouseLocation(UserInputService).X) / Settings.Sensitivity2, (LockedPosition.Y - GetMouseLocation(UserInputService).Y) / Settings.Sensitivity2)
+				else
+					if Settings.Sensitivity > 0 then
+						Animation = TweenService:Create(Camera, TweenInfonew(Environment.Settings.Sensitivity, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {CFrame = CFramenew(Camera.CFrame.Position, LockedPosition_Vector3)})
+						Animation:Play()
+					else
+						__newindex(Camera, "CFrame", CFramenew(Camera.CFrame.Position, LockedPosition_Vector3 + Offset))
+					end
+
+					__newindex(UserInputService, "MouseDeltaSensitivity", 0)
+				end
+
+				setrenderproperty(FOVCircle, "Color", FOVSettings.LockedColor)
+			end
+		end
+	end)
+
+	ServiceConnections.InputBeganConnection = Connect(__index(UserInputService, "InputBegan"), function(Input)
+		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
+
+		if Typing then
+			return
+		end
+
+		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
+			if Toggle then
+				Running = not Running
+
+				if not Running then
+					CancelLock()
+				end
+			else
+				Running = true
+			end
+		end
+	end)
+
+	ServiceConnections.InputEndedConnection = Connect(__index(UserInputService, "InputEnded"), function(Input)
+		local TriggerKey, Toggle = Settings.TriggerKey, Settings.Toggle
+
+		if Toggle or Typing then
+			return
+		end
+
+		if Input.UserInputType == Enum.UserInputType.Keyboard and Input.KeyCode == TriggerKey or Input.UserInputType == TriggerKey then
+			Running = false
+			CancelLock()
+		end
+	end)
 end
 
 --// Typing Check
